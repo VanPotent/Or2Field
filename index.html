@@ -2,127 +2,222 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Or2Field - Orion to Rayfield Converter</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Or2Field Converter</title>
+  <!-- Google Fonts -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" />
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
-      font-family: 'Inter', sans-serif;
       margin: 0;
-      padding: 40px;
-      background: #f8f9fb;
-      color: #222;
+      font-family: 'Inter', sans-serif;
+      background-color: #121212;
+      color: #e0e0e0;
+      line-height: 1.6;
     }
-
-    h1 {
-      text-align: center;
-      margin-bottom: 20px;
-    }
-
     .container {
-      max-width: 1000px;
-      margin: auto;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem;
     }
-
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    header img {
+      max-width: 120px;
+      display: block;
+      margin: 0 auto 0.5rem;
+    }
+    header h1 {
+      font-size: 2.5rem;
+      margin: 0;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
     textarea {
       width: 100%;
-      height: 250px;
-      padding: 12px;
-      margin-bottom: 20px;
+      background: #1e1e1e;
+      border: 1px solid #333;
       border-radius: 8px;
-      border: 1px solid #ccc;
+      color: #e0e0e0;
+      padding: 1rem;
       font-family: monospace;
-      font-size: 14px;
+      font-size: 1rem;
       resize: vertical;
-      background-color: #fff;
     }
-
     button {
-      padding: 10px 20px;
       background-color: #3740ff;
+      color: #fff;
       border: none;
-      color: white;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
       font-weight: 600;
       border-radius: 6px;
       cursor: pointer;
-      margin-right: 10px;
+      transition: background-color 0.3s;
+      margin-right: 1rem;
     }
-
-    #output-section {
+    button:hover {
+      background-color: #2a33cc;
+    }
+    .output-section {
       position: relative;
+      margin-top: 1rem;
     }
-
-    #copy-btn {
+    #copyBtn {
       position: absolute;
-      right: 0;
-      top: -38px;
-      font-size: 13px;
-      background-color: #666;
+      right: 8px;
+      top: 8px;
+      background-color: #03dac6;
+      color: #000;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s;
     }
-
+    #copyBtn:hover {
+      background-color: #02b3a0;
+    }
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(18,18,18,0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .spinner {
+      border: 6px solid #333;
+      border-top: 6px solid #03dac6;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
     .footer {
       text-align: center;
-      margin-top: 60px;
-      font-size: 13px;
-      color: #888;
+      margin-top: 3rem;
+      font-size: 0.875rem;
+      color: #aaa;
+    }
+    a {
+      color: #03dac6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
     }
   </style>
 </head>
 <body>
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="spinner"></div>
+    <div id="loadingMsg">Loading Python engine and converter...</div>
+  </div>
+
   <div class="container">
-    <h1>Or2Field - Orion to Rayfield Converter</h1>
+    <header>
+      <img src="https://raw.githubusercontent.com/VanPotent/VanPotent/b08471cc4c0bcad957ac6acba9fecc00c4dbc703/logo.png" alt="Or2Field Logo" />
+      <h1>Or2Field Converter</h1>
+    </header>
 
-    <textarea id="input" placeholder="Paste your Orion script here..."></textarea>
-    <button onclick="convert()">Convert</button>
+    <label for="inputCode">Input Orion Code</label>
+    <textarea id="inputCode" placeholder="Paste your Orion code here..."></textarea>
 
-    <div id="output-section">
-      <textarea id="output" placeholder="Converted Rayfield script will appear here..."></textarea>
-      <button id="copy-btn" onclick="copyOutput()">Copy</button>
-    </div>
+    <button id="convertBtn">Convert</button>
 
-    <div class="footer">
-      Powered by Pyodide | <a href="https://github.com/VanPotent/Ori2Field" target="_blank">View Source</a>
+    <label for="outputCode">Rayfield Output</label>
+    <div class="output-section">
+      <textarea id="outputCode" placeholder="Your Rayfield code will appear here..." readonly></textarea>
+      <button id="copyBtn">Copy Output</button>
     </div>
   </div>
 
+  <div class="footer">
+    Or2Field Converter | <a href="https://github.com/VanPotent/Ori2Field" target="_blank">View on GitHub</a>
+  </div>
+
+  <!-- Pyodide Script -->
   <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
   <script>
     let pyodideReady = false;
-    let pythonConverterCode = '';
-
+    let converterLoaded = false;
+    let pythonConverterCode = "";
+    
+    // Display a message and disable convert until ready
+    const loadingOverlay = document.getElementById("loadingOverlay");
+    const convertBtn = document.getElementById("convertBtn");
+    convertBtn.disabled = true;
+    
     async function loadPythonConverter() {
-      const response = await fetch("https://raw.githubusercontent.com/VanPotent/Ori2Field/refs/heads/main/Versions/V0.3.py");
-      pythonConverterCode = await response.text();
-
-      self.pyodide = await loadPyodide();
-      await pyodide.loadPackage("micropip");
-      await pyodide.runPythonAsync(pythonConverterCode);
-      pyodideReady = true;
+      try {
+        // Fetch your Python converter code from GitHub
+        const response = await fetch("https://raw.githubusercontent.com/VanPotent/Ori2Field/refs/heads/main/Versions/V0.3.py");
+        pythonConverterCode = await response.text();
+        
+        // Load Pyodide
+        self.pyodide = await loadPyodide();
+        // Load additional packages if needed (optional)
+        // await pyodide.loadPackage("micropip");
+        
+        // Run your converter code so that the conversion function is defined
+        await pyodide.runPythonAsync(pythonConverterCode);
+        converterLoaded = true;
+        pyodideReady = true;
+        loadingOverlay.style.display = "none";
+        convertBtn.disabled = false;
+      } catch (err) {
+        document.getElementById("loadingMsg").innerText = "Failed to load converter.";
+        console.error(err);
+      }
     }
-
+    
     loadPythonConverter();
-
-    async function convert() {
-      if (!pyodideReady) {
-        alert("Still loading Python engine... please wait.");
+    
+    // Conversion button click
+    async function convertCode() {
+      if (!pyodideReady || !converterLoaded) {
+        alert("The converter is still loading, please wait.");
         return;
       }
-
-      const userInput = document.getElementById("input").value;
+      const inputCode = document.getElementById("inputCode").value;
       try {
-        pyodide.globals.set("orion_code", userInput);
-        const output = await pyodide.runPythonAsync("convert_orion_to_rayfield(orion_code)");
-        document.getElementById("output").value = output;
-      } catch (err) {
-        document.getElementById("output").value = "Error during conversion:\n\n" + err;
+        pyodide.globals.set("orion_code", inputCode);
+        const result = await pyodide.runPythonAsync("convert_orion_to_rayfield(orion_code)");
+        document.getElementById("outputCode").value = result;
+      } catch (e) {
+        document.getElementById("outputCode").value = "Error during conversion:\n\n" + e;
+        console.error(e);
       }
     }
-
-    function copyOutput() {
-      const output = document.getElementById("output");
+    
+    document.getElementById("convertBtn").addEventListener("click", convertCode);
+    
+    // Copy output button
+    document.getElementById("copyBtn").addEventListener("click", () => {
+      const output = document.getElementById("outputCode");
       output.select();
       document.execCommand("copy");
-    }
+      alert("Output copied to clipboard.");
+    });
   </script>
 </body>
 </html>
