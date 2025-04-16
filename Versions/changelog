@@ -1,0 +1,13 @@
+# Fixes from 0.1 -0.2:
+
+Fixed paragraph conversion to support multi-line strings using [[ ... ]] Lua syntax.
+
+Corrected regex logic to match both single-line ("...", '...') and multi-line ([[...]]) content in AddParagraph.
+
+Improvements
+Enhanced paragraph conversion to output Tab:CreateParagraph({ Title = ..., Content = ... }) format correctly.
+
+Applied re.DOTALL to allow paragraph content matching across multiple lines.
+
+Internal
+Refactored regex handling for more accurate and universal Lua string detection in paragraph conversions.
