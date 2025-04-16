@@ -1,4 +1,4 @@
-# Fixes from 0.1 -0.2:
+Fixes from 0.1 -0.2:
 
 Fixed paragraph conversion to support multi-line strings using [[ ... ]] Lua syntax.
 
