@@ -13,11 +13,10 @@
 - Zero config — run and convert  
 - No flags required  
 
----
+<p align="center">
+  <img src="https://github.com/VanPotent/VanPotent/blob/b08471cc4c0bcad957ac6acba9fecc00c4dbc703/logo.png" alt="Preview" width="300"/>
+</p>
 
-## 🖼️ Preview
-
-![Preview](https://github.com/VanPotent/VanPotent/blob/dfe4c2018ca1502e904b35fe1daad96627eaeef2/LOGOO.png)
 
 ---
 
