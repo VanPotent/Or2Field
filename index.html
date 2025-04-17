@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Orion to Rayfield Converter</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    textarea { width: 90%; margin-bottom: 10px; }
+    button { padding: 5px 10px; }
+  </style>
+</head>
+<body>
+  <h2>Orion-to-Rayfield UI Script Converter</h2>
+  <p>Paste your OrionLib-based Lua script below and click "Convert" to get the Rayfield version.</p>
+  <textarea id="inputScript" rows="15" placeholder="Paste OrionLib script here..."></textarea><br>
+  <button onclick="convert()">Convert to Rayfield</button><br>
+  <textarea id="outputScript" rows="15" placeholder="Rayfield script output..."></textarea>
+
+  <script>
+    function convert() {
+      const input = document.getElementById('inputScript').value;
+      const output = convertOrionToRayfield(input);
+      document.getElementById('outputScript').value = output;
+    }
+
+    function convertOrionToRayfield(code) {
+      // 1. Replace OrionLib loadstring with Rayfield loadstring
+      code = code.replace(/local\s+OrionLib\s*=\s*loadstring\\([^)]*Orion[^)]*\\)\\s*\\(\\s*\\)/, 
+                "local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()");
+
+      // 2. Convert OrionLib:MakeWindow to Rayfield:CreateWindow (with field mapping)
+      code = code.replace(/OrionLib:MakeWindow\s*\\(\\s*\\{([^]*?)\\}\\s*\\)/, function(match, p1, inner) {
+        const fields = parseFields(inner);
+        let nameVal, configFolder, introText, introEnabled = false, iconVal;
+        let saveConfig = false;
+        const newFields = [];
+        fields.forEach(field => {
+          const [keyRaw, valRaw] = field.split('=');
+          if (!keyRaw || !valRaw) return;
+          const key = keyRaw.trim().replace(/^["']|["']$/g, "");
+          const val = valRaw.trim();
+          switch (key) {
+            case "Name":
+              nameVal = val;
+              newFields.push(`Name = ${val}`);
+              break;
+            case "HidePremium":
+              // drop this field
+              break;
+            case "SaveConfig":
+              if (/true/i.test(val)) saveConfig = true;
+              break;
+            case "ConfigFolder":
+              configFolder = val;
+              break;
+            case "IntroEnabled":
+              if (/true/i.test(val)) introEnabled = true;
+              break;
+            case "IntroText":
+              introText = val;
+              break;
+            case "IntroIcon":
+              // no direct support; we'll ignore or use if Icon not set
+              if (!iconVal) iconVal = val;
+              break;
+            case "Icon":
+              iconVal = val;
+              break;
+            case "CloseCallback":
+              // drop this entire function field
+              break;
+            default:
+              // ignore unknown fields
+              break;
+          }
+        });
+        // Intro text mapping to Rayfield LoadingTitle/Subtitle
+        if (introEnabled && introText) {
+          newFields.push(`LoadingTitle = ${introText}`);
+          newFields.push(`LoadingSubtitle = "Loading..."`);
+        }
+        // Icon field conversion
+        if (iconVal) {
+          const convIcon = convertIcon(iconVal);
+          if (convIcon !== null) {
+            newFields.push(`Icon = ${convIcon}`);
+          } else {
+            newFields.push(`Icon = 0`);
+          }
+        }
+        // ConfigurationSaving block
+        if (saveConfig) {
+          newFields.push(`ConfigurationSaving = {`);
+          newFields.push(`    Enabled = true,`);
+          if (configFolder) {
+            newFields.push(`    FolderName = ${configFolder},`);
+          } else {
+            newFields.push(`    FolderName = nil,`);
+          }
+          // Use hub name or default for FileName
+          let fileName = "\"Config\"";
+          if (nameVal) {
+            const nameStr = nameVal.replace(/^["']|["']$/g, "").replace(/\\W+/g, "");
+            if (nameStr) fileName = `"${nameStr}"`;
+          }
+          newFields.push(`    FileName = ${fileName}`);
+          newFields.push(`}`);
+        }
+        // Assemble the CreateWindow call
+        let result = "Rayfield:CreateWindow({";
+        if (newFields.length > 0) {
+          // Preserve original indentation if present
+          const indentMatch = inner.match(/^(\\s*)Name/m);
+          const indent = indentMatch ? indentMatch[1] : "    ";
+          result += "\\n" + newFields.map(f => indent + f).join(",\\n") + "\\n" + "})";
+        } else {
+          result += " })";
+        }
+        return result;
+      });
+
+      // 3. Convert Window:MakeTab to Window:CreateTab
+      code = code.replace(/:MakeTab\s*\\(\\s*\\{([^]*?)\\}\\s*\\)/g, function(match, p1, inner) {
+        const fields = parseFields(inner);
+        let nameVal, iconVal;
+        fields.forEach(field => {
+          const [keyRaw, valRaw] = field.split('=');
+          if (!keyRaw || !valRaw) return;
+          const key = keyRaw.trim().replace(/^["']|["']$/g, "");
+          const val = valRaw.trim();
+          if (key === "Name") nameVal = val;
+          if (key === "Icon") iconVal = val;
+          // PremiumOnly is ignored
+        });
+        if (!nameVal) nameVal = "\"Tab\"";
+        let tabCall = `:CreateTab(${nameVal}`;
+        if (iconVal) {
+          const convIcon = convertIcon(iconVal);
+          tabCall += convIcon !== null ? `, ${convIcon}` : `, 0`;
+        }
+        tabCall += ")";
+        return tabCall;
+      });
+
+      // 4. Sections, Labels, Paragraphs
+      code = code.replace(/:AddSection\\(\\s*\\{\\s*Name\\s*=\\s*([^}]+)\\}\\)/g, ':CreateSection($1)');
+      code = code.replace(/:AddLabel\\(\\s*(".*?"|'.*?')\\s*\\)/g, ':CreateLabel($1)');
+      code = code.replace(/:AddParagraph\\(\\s*(".*?"|'.*?')\\s*,\\s*(".*?"|'.*?')\\s*\\)/g,
+                          ':CreateParagraph({ Title = $1, Content = $2 })');
+
+      // 5. Buttons, Toggles, Sliders, etc.
+      code = code.replace(/:AddButton\\(\\s*\\{([^]*?)\\}\\s*\\)/g, function(match, inner) {
+        const fields = parseFields(inner);
+        let nameVal, callbackVal; const others = [];
+        fields.forEach(field => {
+          const [keyRaw, valRaw] = field.split('=');
+          if (!keyRaw || !valRaw) return;
+          const key = keyRaw.trim().replace(/^["']|["']$/g, "");
+          const val = valRaw.trim();
+          if (key === "Name") nameVal = val;
+          else if (key === "Callback") callbackVal = val;
+          else others.push(field.trim());
+        });
+        if (!nameVal) nameVal = "\"Button\"";
+        if (!callbackVal) callbackVal = "function() end";
+        let out = `:CreateButton({ Name = ${nameVal}, Callback = ${callbackVal}`;
+        if (others.length) out += ", " + others.join(", ");
+        out += " })";
+        return out;
+      });
+      code = code.replace(/:AddToggle\\(\\s*\\{([^]*?)\\}\\s*\\)/g, function(match, inner) {
+        const fields = parseFields(inner);
+        let nameVal, currentVal, callbackVal; const others = [];
+        fields.forEach(field => {
+          const [keyRaw, valRaw] = field.split('=');
+          if (!keyRaw || !valRaw) return;
+          const key = keyRaw.trim().replace(/^["']|["']$/g, "");
+          const val = valRaw.trim();
+          if (key === "Name") nameVal = val;
+          else if (key.toLowerCase() === "default" || key === "CurrentValue") currentVal = val;
+          else if (key === "Callback") callbackVal = val;
+          else others.push(field.trim());
+        });
+        if (!nameVal) nameVal = "\"Toggle\"";
+        if (!currentVal) currentVal = "false";
+        if (!callbackVal) callbackVal = "function(value) end";
+        let out = `:CreateToggle({ Name = ${nameVal}, CurrentValue = ${currentVal}, Callback = ${callbackVal}`;
+        if (others.length) out += ", " + others.join(", ");
+        out += " })";
+        return out;
+      });
+      code = code.replace(/:AddSlider\\(\\s*\\{([^]*?)\\}\\s*\\)/g, function(match, inner) {
+        const fields = parseFields(inner);
+        let nameVal, minVal, maxVal, currentVal, incVal, suffixVal, callbackVal; const others = [];
+        fields.forEach(field => {
+          const [keyRaw, valRaw] = field.split('=');
+          if (!keyRaw || !valRaw) return;
+          const key = keyRaw.trim().replace(/^["']|["']$/g, "");
+          const val = valRaw.trim();
+          if (key === "Name") nameVal = val;
+          else if (key === "Min") minVal = val;
+          else if (key === "Max") maxVal = val;
+          else if (key === "Default") currentVal = val;
+          else if (key === "Increment") incVal = val;
+          else if (key === "ValueName" || key === "Suffix") suffixVal = val;
+          else if (key === "Callback") callbackVal = val;
+          else if (key === "Color") {/* skip */} 
+          else others.push(field.trim());
+        });
+        if (!nameVal) nameVal = "\"Slider\"";
+        if (!minVal) minVal = "0";
+        if (!maxVal) maxVal = "100";
+        if (!currentVal) currentVal = minVal;
+        if (!incVal) incVal = "1";
+        if (!suffixVal) suffixVal = "\"\"";
+        if (!callbackVal) callbackVal = "function(value) end";
+        let out = `:CreateSlider({ Name = ${nameVal}, Range = { ${minVal}, ${maxVal} }, Increment = ${incVal}, Suffix = ${suffixVal}, CurrentValue = ${currentVal}, Callback = ${callbackVal}`;
+        if (others.length) out += ", " + others.join(", ");
+        out += " })";
+        return out;
+      });
+      code = code.replace(/:AddDropdown\\(\\s*\\{([^]*?)\\}\\s*\\)/g, function(match, inner) {
+        const fields = parseFields(inner);
+        let nameVal, optionsVal, defaultVal, callbackVal; const others = [];
+        fields.forEach(field => {
+          const [keyRaw, valRaw] = field.split('=');
+          if (!keyRaw || !valRaw) return;
+          const key = keyRaw.trim().replace(/^["']|["']$/g, "");
+          const val = valRaw.trim();
+          if (key === "Name") nameVal = val;
+          else if (key === "Options") optionsVal = val;
+          else if (key === "Default" || key === "CurrentOption") defaultVal = val;
+          else if (key === "Callback") callbackVal = val;
+          else others.push(field.trim());
+        });
+        if (!nameVal) nameVal = "\"Dropdown\"";
+        if (!optionsVal) optionsVal = "{}";
+        // Wrap default in table if not already
+        if (defaultVal) {
+          if (!defaultVal.trim().startsWith("{")) {
+            defaultVal = `{ ${defaultVal} }`;
+          }
+        } else {
+          // if no default, use first option as default if available
+          const optMatch = optionsVal.match(/\\{\\s*([^}]+?)\\s*\\}/);
+          if (optMatch) {
+            const firstOpt = optMatch[1].split(',')[0];
+            defaultVal = `{ ${firstOpt.trim()} }`;
+          } else {
+            defaultVal = "{}";
+          }
+        }
+        if (!callbackVal) callbackVal = "function(option) end";
+        let out = `:CreateDropdown({ Name = ${nameVal}, Options = ${optionsVal}, CurrentOption = ${defaultVal}, MultipleOptions = false, Callback = ${callbackVal}`;
+        if (others.length) out += ", " + others.join(", ");
+        out += " })";
+        return out;
+      });
+      code = code.replace(/:AddBind\\(\\s*\\{([^]*?)\\}\\s*\\)/g, function(match, inner) {
+        const fields = parseFields(inner);
+        let nameVal, keyVal, holdVal, callbackVal; const others = [];
+        fields.forEach(field => {
+          const [keyRaw, valRaw] = field.split('=');
+          if (!keyRaw || !valRaw) return;
+          const key = keyRaw.trim().replace(/^["']|["']$/g, "");
+          const val = valRaw.trim();
+          if (key === "Name") nameVal = val;
+          else if (key === "Default" || key === "Key" || key === "Keybind") keyVal = val;
+          else if (key === "Hold") holdVal = val;
+          else if (key === "Callback") callbackVal = val;
+          else others.push(field.trim());
+        });
+        if (!nameVal) nameVal = "\"Keybind\"";
+        if (!keyVal) keyVal = "Enum.KeyCode.Unknown";
+        if (!holdVal) holdVal = "false";
+        if (!callbackVal) callbackVal = "function() end";
+        let out = `:CreateKeybind({ Name = ${nameVal}, CurrentKeybind = ${keyVal}, HoldToInteract = ${holdVal}, Callback = ${callbackVal}`;
+        if (others.length) out += ", " + others.join(", ");
+        out += " })";
+        return out;
+      });
+      code = code.replace(/:AddTextbox\\(\\s*\\{([^]*?)\\}\\s*\\)/g, function(match, inner) {
+        const fields = parseFields(inner);
+        let nameVal, textVal, removeVal, callbackVal; const others = [];
+        fields.forEach(field => {
+          const [keyRaw, valRaw] = field.split('=');
+          if (!keyRaw || !valRaw) return;
+          const key = keyRaw.trim().replace(/^["']|["']$/g, "");
+          const val = valRaw.trim();
+          if (key === "Name") nameVal = val;
+          else if (key === "Default" || key === "Text" || key === "CurrentValue") textVal = val;
+          else if (key === "TextDisappear" || key === "RemoveTextAfterFocusLost") removeVal = val;
+          else if (key === "Callback") callbackVal = val;
+          else others.push(field.trim());
+        });
+        if (!nameVal) nameVal = "\"Textbox\"";
+        if (!textVal) textVal = "\"\"";
+        if (!removeVal) removeVal = "false";
+        if (!callbackVal) callbackVal = "function(value) end";
+        let out = `:CreateInput({ Name = ${nameVal}, CurrentValue = ${textVal}, PlaceholderText = "", RemoveTextAfterFocusLost = ${removeVal}, Callback = ${callbackVal}`;
+        if (others.length) out += ", " + others.join(", ");
+        out += " })";
+        return out;
+      });
+      code = code.replace(/:AddColorpicker\\(\\s*\\{([^]*?)\\}\\s*\\)/g, function(match, inner) {
+        const fields = parseFields(inner);
+        let nameVal, colorVal, callbackVal; const others = [];
+        fields.forEach(field => {
+          const [keyRaw, valRaw] = field.split('=');
+          if (!keyRaw || !valRaw) return;
+          const key = keyRaw.trim().replace(/^["']|["']$/g, "");
+          const val = valRaw.trim();
+          if (key === "Name") nameVal = val;
+          else if (key === "Default" || key === "Color") colorVal = val;
+          else if (key === "Callback") callbackVal = val;
+          else others.push(field.trim());
+        });
+        if (!nameVal) nameVal = "\"Color Picker\"";
+        if (!colorVal) colorVal = "Color3.fromRGB(255,255,255)";
+        if (!callbackVal) callbackVal = "function(color) end";
+        let out = `:CreateColorPicker({ Name = ${nameVal}, Color = ${colorVal}, Callback = ${callbackVal}`;
+        if (others.length) out += ", " + others.join(", ");
+        out += " })";
+        return out;
+      });
+
+      // 6. Notifications
+      code = code.replace(/OrionLib:MakeNotification\\(\\s*\\{([^]*?)\\}\\s*\\)/g, function(match, inner) {
+        const fields = parseFields(inner);
+        let titleVal, contentVal, imageVal, durationVal;
+        fields.forEach(field => {
+          const [keyRaw, valRaw] = field.split('=');
+          if (!keyRaw || !valRaw) return;
+          const key = keyRaw.trim().replace(/^["']|["']$/g, "");
+          const val = valRaw.trim();
+          if (key === "Name" || key === "Title") titleVal = val;
+          else if (key === "Content") contentVal = val;
+          else if (key === "Image") imageVal = val;
+          else if (key === "Time" || key === "Duration") durationVal = val;
+        });
+        if (!titleVal) titleVal = "\"Notification\"";
+        if (!contentVal) contentVal = "\"\"";
+        if (!durationVal) durationVal = "5";
+        let imageField = "";
+        if (imageVal) {
+          const convIcon = convertIcon(imageVal);
+          if (convIcon !== null) {
+            imageField = `, Image = ${convIcon}`;
+          }
+        }
+        return `Rayfield:Notify({ Title = ${titleVal}, Content = ${contentVal}, Duration = ${durationVal}${imageField} })`;
+      });
+
+      // 7. Final touches: replace OrionLib:Destroy with Rayfield:Destroy
+      code = code.replace(/OrionLib:Destroy/g, "Rayfield:Destroy");
+      // If config saving was enabled, append Rayfield:LoadConfiguration() at end
+      if (code.includes("ConfigurationSaving")) {
+        code += "\nRayfield:LoadConfiguration()";
+      }
+      return code;
+    }
+
+    // Helper: Parse top-level fields in a { } block, accounting for nested braces and functions
+    function parseFields(str) {
+      const fields = [];
+      let bracketDepth = 0, inQuotes = false, quoteChar = '', inFunction = false, funcDepth = 0;
+      let current = "";
+      for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        if (inQuotes) {
+          current += ch;
+          if (ch === quoteChar && str[i-1] !== '\\\\') {  // end of string literal
+            inQuotes = false;
+            quoteChar = '';
+          }
+        } else if (inFunction) {
+          current += ch;
+          if (ch.toLowerCase() === 'f' && str.slice(i, i+8).toLowerCase() === 'function') {
+            funcDepth++;
+          } else if (ch.toLowerCase() === 'e' && str.slice(i, i+3).toLowerCase() === 'end') {
+            funcDepth--;
+            // append "end"
+            // (We add the 'end' token, and then skip ahead 2 characters to move past it)
+            current += str[++i];
+            current += str[++i];
+            if (funcDepth <= 0) {
+              inFunction = false;
+            }
+          }
+        } else {
+          // not in quotes or function
+          if (ch === '"' || ch === '\'') {
+            inQuotes = true;
+            quoteChar = ch;
+            current += ch;
+          } else if (ch === '{') {
+            bracketDepth++;
+            current += ch;
+          } else if (ch === '}') {
+            if (bracketDepth > 0) bracketDepth--;
+            current += ch;
+          } else if (ch.toLowerCase() === 'f' && str.slice(i, i+8).toLowerCase() === 'function') {
+            inFunction = true;
+            funcDepth = 1;
+            current += "function";
+            i += 7; // jump to end of "function"
+          } else if (ch === ',' && bracketDepth === 0 && !inFunction) {
+            fields.push(current.trim());
+            current = "";
+          } else {
+            current += ch;
+          }
+        }
+      }
+      if (current.trim() !== "") {
+        fields.push(current.trim());
+      }
+      return fields;
+    }
+
+    // Helper: Convert icon/image values to Rayfield format
+    function convertIcon(val) {
+      val = val.trim();
+      let quoted = false, quoteChar = '';
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        quoted = true;
+        quoteChar = val[0];
+        val = val.slice(1, -1);
+      }
+      if (!val) return null;
+      if (val.startsWith("rbxassetid://")) {
+        val = val.substring("rbxassetid://".length);
+      }
+      // If numeric, return as number literal
+      if (/^\\d+$/.test(val)) {
+        return val;  // use as is (unquoted number)
+      }
+      // If an external URL (http), Rayfield can't use it – return null to drop it
+      if (/^https?:\\/\\//.test(val)) {
+        return null;
+      }
+      // Otherwise, treat as a string (likely a Lucide icon name or unrecognized id)
+      return quoted ? (quoteChar + val + quoteChar) : `"${val}"`;
+    }
+  </script>
+</body>
+</html>
