@@ -1,5 +1,16 @@
-Fixes from 0.2 to 0.3:
+Fixes from 0.3.0 to 0.3.1:
 
+Replaced naïve ["'].*?["'] title/content regex with (['"])(.*?)\1 so we only stop on the matching quote.
+Pulled out the inner text, escaped any " characters, and always wrapped it in a valid Lua double‑quoted string.
+Unified Image handling to accept:
+rbxassetid://… → numeric ID
+quoted icon names → wrapped in "
+unquoted numbers → left as-is
+Renamed Time = … to Duration = … for Rayfield’s API.
+Simplified the Python code to eliminate nested backslashes and avoid string literal syntax errors.
+
+
+Fixes from 0.2 to 0.3:
 Changed the deletion loop in deleteSpecificObjects() to use game.Workspace:GetDescendants() instead of game:GetDescendants(). This prevents UI elements (like those within CoreGui or other non-workspace objects) from being inadvertently destroyed.
 
 Improvements
