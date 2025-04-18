@@ -1,3 +1,10 @@
+
+
+
+Fixes from 0.3.1 to 0.3.2:
+Fixed the orion library loadstring not converting to the rayfield library loadstring due to character detecting issues.
+
+
 Fixes from 0.3.0 to 0.3.1:
 
 Replaced naïve ["'].*?["'] title/content regex with (['"])(.*?)\1 so we only stop on the matching quote.
