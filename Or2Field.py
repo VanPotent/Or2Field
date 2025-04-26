@@ -14,11 +14,11 @@ def convert_orion_to_rayfield(orion_code: str) -> str:
 
 
 
-    # 2. Converting OrionLib:MakeWindow call to Rayfield:CreateWindow
+    # 2. OrionLib:MakeWindow call to Rayfield:CreateWindow
     def replace_makewindow(match):
         nonlocal config_enabled
         content = match.group(1)
-        # Remove CloseCallback function if present (Rayfield has no equivalent)
+        # Remove CloseCallback function if present (Rayfield has no equivalent :( )
         cc_idx = content.find('CloseCallback')
         if cc_idx != -1:
             func_idx = content.find('function', cc_idx)
