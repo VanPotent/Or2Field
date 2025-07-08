@@ -72,7 +72,7 @@ def convert_orion_to_rayfield(orion_code: str) -> str:
                 inner = raw[1:-1]
                 if inner.startswith("rbxassetid://"):
                     intro_icon_val = inner.split("://")[1]
-        # Process Icon: only keep if it's a valid asset id (rbxassetid://... or pure digit)
+        # Process Icon: only keep if it's a valid asset id, else set it to nothing
         icon_val = None
         if icon_match:
             raw = icon_match.group(1)
